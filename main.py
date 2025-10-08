@@ -8,13 +8,17 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # === CONFIG ===
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # set this in Render
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Set this in Render
 
 # === LOGGING ===
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
+
+# === MEMORY STORE ===
+# Simple in-memory conversation history per user
+user_memory = {}
 
 # === FLASK KEEP-ALIVE SERVER ===
 def keep_alive():
@@ -27,17 +31,10 @@ def keep_alive():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# === COMMAND HANDLERS ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Hey 👋! I’m your AI assistant powered by OpenRouter.\n\n"
-        "Just send me any question or topic!"
-    )
-
-# === AI RESPONSE HANDLER ===
-async def ask_openrouter(prompt: str) -> str:
+# === OPENROUTER AI REQUEST ===
+async def ask_openrouter(messages: list) -> str:
     """
-    Send a prompt to OpenRouter API and return the model's response.
+    Send a conversation to OpenRouter API and return the model's reply.
     """
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
@@ -48,11 +45,8 @@ async def ask_openrouter(prompt: str) -> str:
     }
 
     payload = {
-        "model": "openai/gpt-3.5-turbo",  # choose any supported model
-        "messages": [
-            {"role": "system", "content": "You are a helpful Telegram AI assistant."},
-            {"role": "user", "content": prompt}
-        ]
+        "model": "openai/gpt-3.5-turbo",  # You can change to gpt-4o or another model
+        "messages": messages
     }
 
     async with aiohttp.ClientSession() as session:
@@ -65,14 +59,38 @@ async def ask_openrouter(prompt: str) -> str:
             data = await response.json()
             return data["choices"][0]["message"]["content"].strip()
 
-# === TELEGRAM MESSAGE HANDLER ===
+# === COMMAND HANDLERS ===
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Hey 👋! I’m your AI assistant powered by OpenRouter.\n\n"
+        "Just send me any question or topic — I’ll remember our conversation!"
+    )
+
+# === MESSAGE HANDLER WITH SESSION MEMORY ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
     user_input = update.message.text
+
+    # Load or initialize memory for this user
+    history = user_memory.get(user_id, [])
+
+    # Add the latest user message
+    history.append({"role": "user", "content": user_input})
+    history = history[-8:]  # keep only the last 5 exchanges for memory efficiency
+
+    # Prepare messages with context
+    messages = [{"role": "system", "content": "You are a friendly and helpful Telegram assistant."}] + history
+
     await update.message.reply_text("🤖 Thinking...")
 
     try:
-        ai_reply = await ask_openrouter(user_input)
+        ai_reply = await ask_openrouter(messages)
         await update.message.reply_text(ai_reply)
+
+        # Save assistant reply in memory
+        history.append({"role": "assistant", "content": ai_reply})
+        user_memory[user_id] = history[-5:]
+
     except Exception as e:
         logging.exception("Error during AI response:")
         await update.message.reply_text("⚠️ Something went wrong. Please try again later.")
@@ -89,11 +107,11 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logging.info("✅ Telegram bot is now running with OpenRouter API.")
+    logging.info("✅ Telegram bot is now running with OpenRouter + session memory.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 # === ENTRY POINT ===
 if __name__ == "__main__":
-    # Start the web server on a separate thread for Render
+    # Start Flask web server to keep Render container alive
     Thread(target=keep_alive).start()
     main()
