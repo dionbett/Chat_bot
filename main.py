@@ -1,6 +1,8 @@
 import os
 import logging
 import aiohttp
+from threading import Thread
+from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
@@ -14,13 +16,23 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+# === FLASK KEEP-ALIVE SERVER ===
+def keep_alive():
+    app = Flask(__name__)
+
+    @app.route('/')
+    def home():
+        return "✅ Telegram AI bot is running successfully on Render!"
+
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
+
 # === COMMAND HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hey 👋! I’m your AI assistant powered by OpenRouter.\n\n"
         "Just send me any question or topic!"
     )
-
 
 # === AI RESPONSE HANDLER ===
 async def ask_openrouter(prompt: str) -> str:
@@ -36,7 +48,7 @@ async def ask_openrouter(prompt: str) -> str:
     }
 
     payload = {
-        "model": "gpt-3.5-turbo",  # or another available OpenRouter model
+        "model": "openai/gpt-3.5-turbo",  # choose any supported model
         "messages": [
             {"role": "system", "content": "You are a helpful Telegram AI assistant."},
             {"role": "user", "content": prompt}
@@ -53,11 +65,9 @@ async def ask_openrouter(prompt: str) -> str:
             data = await response.json()
             return data["choices"][0]["message"]["content"].strip()
 
-
 # === TELEGRAM MESSAGE HANDLER ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
-
     await update.message.reply_text("🤖 Thinking...")
 
     try:
@@ -67,8 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.exception("Error during AI response:")
         await update.message.reply_text("⚠️ Something went wrong. Please try again later.")
 
-
-# === MAIN ===
+# === MAIN FUNCTION ===
 def main():
     if not BOT_TOKEN:
         raise ValueError("❗ TELEGRAM_BOT_TOKEN environment variable is missing.")
@@ -80,8 +89,11 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    logging.info("✅ Telegram bot is now running with OpenRouter API.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-
+# === ENTRY POINT ===
 if __name__ == "__main__":
+    # Start the web server on a separate thread for Render
+    Thread(target=keep_alive).start()
     main()
