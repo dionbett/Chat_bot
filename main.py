@@ -81,7 +81,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Prepare messages with context
     messages = [{"role": "system", "content": "You are a friendly and helpful Telegram assistant."}] + history
 
-    await update.message.reply_text("⌛")
+    await update.message.reply_text("🤖Thinking ⏳")
 
     try:
         ai_reply = await ask_openrouter(messages)
