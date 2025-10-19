@@ -62,7 +62,7 @@ async def ask_openrouter(messages: list) -> str:
 # === COMMAND HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Hey 👋! I’m your AI assistant powered by OpenRouter.\n\n"
+        "Hey 👋! I’m your AI assistant powered by @Uknowntech1 \n\n"
         "Just send me any question or topic — I’ll remember our conversation!"
     )
 
@@ -79,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = history[-8:]  # keep only the last 5 exchanges for memory efficiency
 
     # Prepare messages with context
-    messages = [{"role": "system", "content": "You are a friendly and helpful Telegram assistant."}] + history
+    messages = [{"role": "system", "content": "You are a friendly and helpful Telegram assistant created by @dionbett and powered by @Uknowntech1."}] + history
 
     await update.message.reply_text("🤖Thinking ⏳")
 
