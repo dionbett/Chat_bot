@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import aiohttp
 from threading import Thread
@@ -8,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 # === CONFIG ===
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")  # Set this in Render
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # === LOGGING ===
 logging.basicConfig(
@@ -17,8 +18,27 @@ logging.basicConfig(
 )
 
 # === MEMORY STORE ===
-# Simple in-memory conversation history per user
 user_memory = {}
+USERS_FILE = "users.json"
+
+
+# === LOAD USERS ON START ===
+def load_users():
+    """Load known users from JSON file."""
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+
+def save_users(users):
+    """Save known users to JSON file."""
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f)
+
+
+known_users = load_users()
+
 
 # === FLASK KEEP-ALIVE SERVER ===
 def keep_alive():
@@ -26,26 +46,25 @@ def keep_alive():
 
     @app.route('/')
     def home():
-        return "✅ Telegram AI bot is running Alive on Render!"
+        return "✅ Telegram AI bot is running alive on Render!"
 
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
+
 # === OPENROUTER AI REQUEST ===
 async def ask_openrouter(messages: list) -> str:
-    """
-    Send a conversation to OpenRouter API and return the model's reply.
-    """
+    """Send conversation to OpenRouter API and return AI reply."""
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://render.com",  # required by OpenRouter
+        "HTTP-Referer": "https://render.com",
         "X-Title": "Render Telegram Bot"
     }
 
     payload = {
-        "model": "openai/gpt-3.5-turbo",  # You can change to gpt-4o or another model
+        "model": "openai/gpt-3.5-turbo",
         "messages": messages
     }
 
@@ -59,43 +78,59 @@ async def ask_openrouter(messages: list) -> str:
             data = await response.json()
             return data["choices"][0]["message"]["content"].strip()
 
+
 # === COMMAND HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id not in known_users:
+        known_users.append(user_id)
+        save_users(known_users)
+
     await update.message.reply_text(
-        "Hey 👋! I’m your AI assistant powered by @Uknowntech1 \n\n"
-        "Just send me any question or topic — I’ll remember our conversation!"
+        "Hey 👋! I’m your AI assistant powered by @Uknowntech1 🚀\n\n"
+        "Send me any question — I’ll remember our chat!"
     )
 
-# === MESSAGE HANDLER WITH SESSION MEMORY ===
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total_users = len(known_users)
+    await update.message.reply_text(f"👥 Total users who interacted with me: {total_users}")
+
+
+# === MESSAGE HANDLER WITH MEMORY ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user_input = update.message.text
 
-    # Load or initialize memory for this user
+    # Register user if new
+    if user_id not in known_users:
+        known_users.append(user_id)
+        save_users(known_users)
+
+    # Load or initialize chat memory
     history = user_memory.get(user_id, [])
-
-    # Add the latest user message
     history.append({"role": "user", "content": user_input})
-    history = history[-8:]  # keep only the last 5 exchanges for memory efficiency
+    history = history[-8:]
 
-    # Prepare messages with context
-    messages = [{"role": "system", "content": "You are a friendly and helpful Telegram assistant created by @dionbett and powered by @Uknowntech1."}] + history
+    messages = [
+        {"role": "system", "content": "You are a friendly Telegram assistant by @dionbett & @Uknowntech1."}
+    ] + history
 
-    await update.message.reply_text("🤖Thinking ⏳")
+    await update.message.reply_text("🤖 Thinking...")
 
     try:
         ai_reply = await ask_openrouter(messages)
         await update.message.reply_text(ai_reply)
 
-        # Save assistant reply in memory
         history.append({"role": "assistant", "content": ai_reply})
-        user_memory[user_id] = history[-5:]
+        user_memory[user_id] = history[-8:]
 
     except Exception as e:
         logging.exception("Error during AI response:")
         await update.message.reply_text("⚠️ Something went wrong. Please try again later.")
 
-# === MAIN FUNCTION ===
+
+# === MAIN ===
 def main():
     if not BOT_TOKEN:
         raise ValueError("❗ TELEGRAM_BOT_TOKEN environment variable is missing.")
@@ -105,13 +140,14 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logging.info("✅ Telegram bot is now running with OpenRouter + session memory.")
+    logging.info("✅ Telegram bot is running with persistent memory + stats.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 # === ENTRY POINT ===
 if __name__ == "__main__":
-    # Start Flask web server to keep Render container alive
     Thread(target=keep_alive).start()
     main()
