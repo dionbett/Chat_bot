@@ -113,7 +113,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = history[-8:]
 
     messages = [
-        {"role": "system", "content": "You are a friendly Telegram assistant by @dionbett & @Uknowntech1."}
+        {"role": "system", "content": "You are a friendly Telegram assistant by @dionbett and powered by @Uknowntech1."}
     ] + history
 
     await update.message.reply_text("🤖 Thinking...")
@@ -143,7 +143,7 @@ def main():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logging.info("✅ Telegram bot is running with persistent memory + stats.")
+    logging.info("✅ Telegram bot is running.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
