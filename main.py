@@ -46,7 +46,7 @@ def keep_alive():
 
     @app.route('/')
     def home():
-        return "✅ Telegram AI bot is running live on Render!"
+        return "✅ Telegram AI bot is running 🟢live on Render!"
 
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
