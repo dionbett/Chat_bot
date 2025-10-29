@@ -113,7 +113,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = history[-8:]
 
     messages = [
-        {"role": "system", "content": "You are a friendly Telegram assistant by @dionbett and powered by @Uknowntech1."}
+        {"role": "system", "content": "You are a friendly Telegram assistant created by @dionbett and powered by @Uknowntech1."}
     ] + history
 
     await update.message.reply_text("🤖 Thinking...")
