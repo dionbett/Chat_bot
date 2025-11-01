@@ -1,2 +1,3 @@
 # Chat_bot
-Responsive AI 
+Responsive chat AI
+
